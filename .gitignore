@@ -37,3 +37,10 @@ docker-compose.override.yml
 # VPN keys
 vpn/wg0.conf
 vpn/client.conf
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
