@@ -33,3 +33,7 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# VPN keys
+vpn/wg0.conf
+vpn/client.conf
