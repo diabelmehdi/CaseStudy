@@ -38,6 +38,9 @@ docker-compose.override.yml
 vpn/wg0.conf
 vpn/client.conf
 
+# Diagram source scripts
+diagrams/*.py
+
 # Terraform
 *.tfstate
 *.tfstate.backup
