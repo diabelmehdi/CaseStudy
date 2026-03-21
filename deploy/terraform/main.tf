@@ -221,6 +221,21 @@ resource "aws_db_instance" "postgres" {
   }
 }
 
+# Secrets Manager
+
+resource "aws_secretsmanager_secret" "db_url" {
+  name = "${var.project_name}-database-url"
+
+  tags = {
+    Name = "${var.project_name}-db-secret"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "db_url" {
+  secret_id     = aws_secretsmanager_secret.db_url.id
+  secret_string = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.endpoint}/${var.db_name}"
+}
+
 # ECR Repository
 
 resource "aws_ecr_repository" "app" {
@@ -267,6 +282,22 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "ecs_secrets_access" {
+  name = "${var.project_name}-secrets-access"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue"
+      ]
+      Resource = [aws_secretsmanager_secret.db_url.arn]
+    }]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${var.project_name}"
   retention_in_days = 30
@@ -294,7 +325,13 @@ resource "aws_ecs_task_definition" "app" {
       { name = "APP_HOST", value = "0.0.0.0" },
       { name = "APP_PORT", value = "8000" },
       { name = "LOG_LEVEL", value = "warning" },
-      { name = "DATABASE_URL", value = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.endpoint}/${var.db_name}" },
+    ]
+
+    secrets = [
+      {
+        name      = "DATABASE_URL"
+        valueFrom = aws_secretsmanager_secret_version.db_url.arn
+      }
     ]
 
     logConfiguration = {
@@ -321,16 +358,28 @@ resource "aws_ecs_service" "app" {
   }
 }
 
+# ACM Certificates for Client VPN (imported via CLI, referenced here)
+
+variable "vpn_server_certificate_arn" {
+  description = "ARN of the server certificate in ACM (imported during setup)"
+  type        = string
+}
+
+variable "vpn_client_certificate_arn" {
+  description = "ARN of the client root certificate in ACM (imported during setup)"
+  type        = string
+}
+
 # AWS Client VPN
 
 resource "aws_ec2_client_vpn_endpoint" "main" {
   description            = "${var.project_name} Client VPN"
-  server_certificate_arn = aws_acm_certificate.vpn_server.arn
+  server_certificate_arn = var.vpn_server_certificate_arn
   client_cidr_block      = var.vpn_client_cidr
 
   authentication_options {
     type                       = "certificate-authentication"
-    root_certificate_chain_arn = aws_acm_certificate.vpn_client.arn
+    root_certificate_chain_arn = var.vpn_client_certificate_arn
   }
 
   connection_log_options {

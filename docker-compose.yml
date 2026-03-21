@@ -12,6 +12,7 @@ services:
     volumes:
       - ./vpn/wg0.conf:/config/wg_confs/wg0.conf
     networks:
+      - external
       - internal
     restart: unless-stopped
 
@@ -50,6 +51,8 @@ services:
     restart: unless-stopped
 
 networks:
+  external:
+    driver: bridge
   internal:
     driver: bridge
     internal: true
