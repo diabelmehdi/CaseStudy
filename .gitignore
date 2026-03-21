@@ -47,3 +47,4 @@ diagrams/*.py
 .terraform/
 .terraform.lock.hcl
 terraform.tfvars
+tfplan
