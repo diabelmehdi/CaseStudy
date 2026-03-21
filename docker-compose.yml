@@ -1,6 +1,6 @@
 services:
   vpn:
-    image: linuxserver/wireguard:latest
+    image: linuxserver/wireguard:1.0.20250521-r1-ls105
     container_name: vpn-gateway
     cap_add:
       - NET_ADMIN

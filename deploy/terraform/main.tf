@@ -140,17 +140,34 @@ resource "aws_route_table_association" "private_b" {
 
 # Security Groups
 
+resource "aws_security_group" "vpn" {
+  name        = "${var.project_name}-vpn-sg"
+  description = "Security group attached to Client VPN network associations"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-vpn-sg"
+  }
+}
+
 resource "aws_security_group" "app" {
   name        = "${var.project_name}-app-sg"
   description = "Allow traffic from VPN clients only"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "API access from VPN clients"
-    from_port   = 8000
-    to_port     = 8000
-    protocol    = "tcp"
-    cidr_blocks = [var.vpn_client_cidr]
+    description     = "API access from VPN (NAT'd traffic)"
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.vpn.id]
   }
 
   egress {
@@ -204,7 +221,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "postgres" {
   identifier             = "${var.project_name}-db"
   engine                 = "postgres"
-  engine_version         = "16.4"
+  engine_version         = "16.6"
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
   storage_encrypted      = true
@@ -313,7 +330,7 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([{
     name  = var.project_name
-    image = "${aws_ecr_repository.app.repository_url}:latest"
+    image = "${aws_ecr_repository.app.repository_url}:${var.app_image_tag}"
 
     portMappings = [{
       containerPort = 8000
@@ -376,6 +393,8 @@ resource "aws_ec2_client_vpn_endpoint" "main" {
   description            = "${var.project_name} Client VPN"
   server_certificate_arn = var.vpn_server_certificate_arn
   client_cidr_block      = var.vpn_client_cidr
+  vpc_id                 = aws_vpc.main.id
+  security_group_ids     = [aws_security_group.vpn.id]
 
   authentication_options {
     type                       = "certificate-authentication"

@@ -34,6 +34,12 @@ variable "db_name" {
   default     = "casestudydb"
 }
 
+variable "app_image_tag" {
+  description = "Docker image tag for the application"
+  type        = string
+  default     = "v1"
+}
+
 variable "vpn_client_cidr" {
   description = "CIDR block for VPN clients"
   type        = string

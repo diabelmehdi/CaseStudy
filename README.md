@@ -126,7 +126,7 @@ Expected output:
 NAME          IMAGE                          SERVICE   STATUS
 prime-api     casestudy-app                  app       Up
 prime-db      postgres:16-alpine             db        Up (healthy)
-vpn-gateway   linuxserver/wireguard:latest   vpn       Up
+vpn-gateway   linuxserver/wireguard   vpn       Up
 ```
 
 ### Step 4: Test the API
@@ -190,7 +190,7 @@ vpn_client_certificate_arn = "<ACM_CLIENT_CERT_ARN>"
 
 ### Step 2: Generate VPN Certificates
 
-AWS Client VPN uses mutual TLS authentication:
+AWS Client VPN uses mutual TLS authentication. The server certificate must include a domain name — without one, ACM will reject it during Client VPN creation.
 
 ```bash
 git clone https://github.com/OpenVPN/easy-rsa.git /tmp/easy-rsa
@@ -198,7 +198,7 @@ cd /tmp/easy-rsa/easyrsa3
 
 ./easyrsa init-pki
 ./easyrsa build-ca nopass
-./easyrsa build-server-full server nopass
+./easyrsa build-server-full server.vpn.local nopass
 ./easyrsa build-client-full client1 nopass
 ```
 
@@ -206,8 +206,8 @@ Upload to AWS ACM:
 
 ```bash
 aws acm import-certificate \
-  --certificate fileb://pki/issued/server.crt \
-  --private-key fileb://pki/private/server.key \
+  --certificate fileb://pki/issued/server.vpn.local.crt \
+  --private-key fileb://pki/private/server.vpn.local.key \
   --certificate-chain fileb://pki/ca.crt \
   --region eu-central-1
 
@@ -237,16 +237,26 @@ terraform output
 
 ### Step 4: Build and Push Docker Image
 
+> **Note:** If building on Apple Silicon (M1/M2/M3), you must specify `--platform linux/amd64` since ECS Fargate runs on x86_64.
+
 ```bash
 aws ecr get-login-password --region eu-central-1 | \
   docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.eu-central-1.amazonaws.com
 
-docker build -t prime-api .
-docker tag prime-api:latest <ECR_REPOSITORY_URL>:latest
-docker push <ECR_REPOSITORY_URL>:latest
+docker build --platform linux/amd64 -t prime-api .
+docker tag prime-api:latest <ECR_REPOSITORY_URL>:v1
+docker push <ECR_REPOSITORY_URL>:v1
 ```
 
 Replace `<ECR_REPOSITORY_URL>` with the value from `terraform output ecr_repository_url`.
+
+Verify the image was pushed and scanned:
+```bash
+aws ecr describe-image-scan-findings \
+  --repository-name prime-api \
+  --image-id imageTag=v1 \
+  --region eu-central-1
+```
 
 ### Step 5: Deploy ECS Service
 
@@ -286,6 +296,15 @@ sudo openvpn --config vpn-client-config.ovpn
 
 ### Step 7: Test the API
 
+Find the private IP of the running ECS task:
+```bash
+TASK_ARN=$(aws ecs list-tasks --cluster prime-api-cluster --service-name prime-api-service --region eu-central-1 --query 'taskArns[0]' --output text)
+
+aws ecs describe-tasks --cluster prime-api-cluster --tasks $TASK_ARN --region eu-central-1 \
+  --query 'tasks[0].attachments[0].details[?name==`privateIPv4Address`].value' --output text
+```
+
+Then test through the VPN connection:
 ```bash
 curl http://<ECS_PRIVATE_IP>:8000/api/v1/health
 
