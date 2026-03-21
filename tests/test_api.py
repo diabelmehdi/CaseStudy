@@ -1,18 +1,19 @@
 import os
 os.environ.setdefault("DATABASE_URL", "sqlite:///test.db")
 
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import MagicMock
-from app.main import app
-from app.db.session import get_db
+from fastapi.testclient import TestClient  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+from app.main import app  # noqa: E402
+from app.db.session import get_db  # noqa: E402
 
 
 def override_get_db():
     db = MagicMock()
     db.add = MagicMock()
     db.commit = MagicMock()
-    db.refresh = MagicMock(side_effect=lambda obj: setattr(obj, "id", 1) or setattr(obj, "created_at", "2026-03-21T00:00:00Z"))
+    db.refresh = MagicMock(
+        side_effect=lambda obj: setattr(obj, "id", 1) or setattr(obj, "created_at", "2026-03-21T00:00:00Z")
+    )
     try:
         yield db
     finally:

@@ -1,4 +1,3 @@
-import pytest
 from app.core.prime import generate_primes
 
 
